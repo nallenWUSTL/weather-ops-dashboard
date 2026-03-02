@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Operations Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Turf.js for spatial intersection logic -->
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <style>
+        #map { height: 750px; border-radius: 1.5rem; background: #010409; cursor: crosshair; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .ai-loading {
+            background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        /* Ticker Animation */
+        @keyframes ticker {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .ticker-content {
+            display: inline-block;
+            white-space: nowrap;
+            padding-right: 100%;
+            animation: ticker 30s linear infinite;
+        }
+        .ticker-content:hover {
+            animation-play-state: paused;
+        }
+
+        .ticker-item {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ticker-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+        }
+
+        /* Emergency Alert Overlay */
+        @keyframes strobe {
+            0%, 100% { background-color: rgba(220, 38, 38, 0.95); }
+            50% { background-color: rgba(153, 27, 27, 0.95); }
+        }
+        .emergency-overlay {
+            animation: strobe 1s infinite;
+            box-shadow: 0 0 100px rgba(220, 38, 38, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30 overflow-x-hidden flex flex-col min-h-screen">
+
+<!-- Emergency Tornado Alert Modal -->
+<div id="tornado-emergency-modal" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-6">
+    <div class="emergency-overlay max-w-4xl w-full border-4 border-white rounded-[3rem] p-10 text-center space-y-8">
+        <div class="flex justify-center">
+            <div class="bg-white text-red-600 p-4 rounded-full animate-bounce">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="currentColor" viewBox="0 0 256 256"><path d="M232,128a104,104,0,1,1-104-104A104.11,104.11,0,0,1,232,128Zm-88,56a8,8,0,0,1-8,8,8,8,0,0,1,0-16A8,8,0,0,1,144,184Zm-16-40a8,8,0,0,0,8-8V80a8,8,0,0,0-16,0v56A8,8,0,0,0,128,144Z"></path></svg>
+            </div>
+        </div>
+        <h2 class="text-6xl font-black text-white uppercase tracking-tighter leading-tight">
+            TORNADO WARNING ISSUED WITHIN 5 MILES OF WASHU!
+        </h2>
+        <p class="text-2xl font-bold text-white/90 uppercase tracking-widest leading-relaxed">
+            PROCEED WITH EMERGENCY NOTIFICATION STANDARD OPERATING PROCEDURES
+        </p>
+        <button onclick="dismissEmergency()" class="bg-white text-red-700 px-12 py-4 rounded-full font-black uppercase text-xl hover:bg-slate-100 transition-all active:scale-95 shadow-2xl">
+            Acknowledge & Close
+        </button>
+    </div>
+</div>
+
+<div class="max-w-[1800px] mx-auto px-4 py-4 flex-grow w-full space-y-4">
+    <!-- Header -->
+    <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-900/80 p-5 rounded-3xl border border-slate-800 backdrop-blur-xl">
+        <div class="flex items-center gap-4">
+            <div class="p-3 bg-blue-600 rounded-2xl shadow-xl shadow-blue-600/20">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm40-88a40,40,0,1,1-40-40A40,40,0,0,1,168,128Z"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-black tracking-tighter text-white uppercase leading-none">Weather Operations Dashboard</h1>
+                <p class="text-blue-500 text-[10px] font-mono uppercase tracking-[0.3em] mt-1">IDSS & Intelligence Monitoring</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-6 bg-slate-950/50 px-6 py-2.5 rounded-2xl border border-slate-800">
+            <div class="flex flex-col text-right">
+                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">System Status</span>
+                <div class="flex items-center gap-2 justify-end">
+                    <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-[10px] font-mono text-green-500 font-bold uppercase">Live Connection</span>
+                </div>
+            </div>
+            <div class="w-px h-8 bg-slate-800"></div>
+            <div class="flex flex-col">
+                <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">Last Intelligence Sync</span>
+                <span id="sync-timestamp" class="text-[11px] font-mono text-white font-bold tracking-tight">--.--.-- | --:--</span>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <button id="ai-brief-btn" class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-2xl transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest active:scale-95 shadow-lg border border-white/10">
+                ✨ Global Briefing
+            </button>
+            <button id="refresh-btn" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-2xl transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest active:scale-95 border border-slate-700">
+                Sync Data
+            </button>
+        </div>
+    </header>
+
+    <!-- Interactive Ticker -->
+    <div class="bg-red-950/20 border border-red-500/30 rounded-2xl h-10 flex items-center overflow-hidden backdrop-blur-md">
+        <div class="bg-red-600 px-4 h-full flex items-center z-10 shadow-lg shrink-0">
+            <span class="text-[9px] font-black uppercase tracking-widest text-white whitespace-nowrap flex items-center gap-2">
+                <span class="animate-ping w-1.5 h-1.5 bg-white rounded-full"></span> Critical Alerts
+            </span>
+        </div>
+        <div id="ticker-container" class="flex-grow overflow-hidden relative h-full flex items-center">
+            <div id="ticker-track" class="ticker-content">
+                <span class="text-[10px] font-mono text-red-200 px-8 italic opacity-50 uppercase tracking-widest">Initializing high-impact convective monitoring...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sidebar -->
+        <div class="lg:col-span-3 space-y-4">
+            <!-- Stats Panel -->
+            <div class="bg-slate-900/50 border border-slate-800 p-5 rounded-3xl">
+                <div class="grid grid-cols-1 gap-4 text-[10px]">
+                    <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center hover:border-blue-500/50 transition-colors">
+                        <div class="text-4xl font-black text-white leading-none" id="stat-visible">0</div>
+                        <div class="text-[10px] text-slate-500 uppercase font-black tracking-widest mt-2">Visible Events</div>
+                    </div>
+                    <div class="bg-red-950/20 p-6 rounded-2xl border border-red-900/30 text-center hover:bg-red-950/30 transition-colors">
+                        <div class="text-4xl font-black text-red-500 leading-none" id="stat-high">0</div>
+                        <div class="text-[10px] text-red-700 uppercase font-black tracking-widest mt-2">Critical Alerts</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Panel -->
+            <div class="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl shadow-xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                        Event Filter
+                    </h2>
+                    <button id="clear-filters" class="text-[9px] text-blue-500 hover:underline font-bold uppercase">Reset</button>
+                </div>
+                <div id="filter-container" class="space-y-1.5 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar text-[10px]">
+                    <div class="py-10 text-center text-slate-600 italic">Connecting to NWS...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map Container -->
+        <div class="lg:col-span-9 relative">
+            <div class="bg-slate-900 p-1 rounded-[2rem] border border-slate-800 shadow-2xl overflow-hidden relative">
+                <div id="map"></div>
+                
+                <div id="alert-detail-panel" class="hidden absolute top-6 right-6 z-[1000] w-80 bg-slate-950/95 border border-blue-500/30 p-5 rounded-2xl shadow-2xl backdrop-blur-xl">
+                    <div class="flex justify-between items-start mb-3">
+                        <h3 id="detail-title" class="text-xs font-black text-white uppercase truncate pr-4">Location Data</h3>
+                        <button id="close-detail" class="text-slate-500 hover:text-white">✕</button>
+                    </div>
+
+                    <!-- Point Forecast Section -->
+                    <div id="forecast-section" class="mb-4 border-b border-slate-800 pb-4 hidden">
+                        <div class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-tighter">🌡️ Point Forecast (IDSS)</div>
+                        <div id="forecast-content" class="text-[11px] text-slate-300"></div>
+                    </div>
+
+                    <!-- AI Analysis Section -->
+                    <div id="detail-summary" class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-tighter">AI Analysis...</div>
+                    <div id="detail-ai-body" class="text-[11px] text-slate-300 leading-relaxed max-h-80 overflow-y-auto custom-scrollbar"></div>
+                    <div id="click-coords" class="mt-4 text-[9px] text-slate-600 font-mono text-right"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const apiKey = "";
+    const API_URL = "https://api.weather.gov/alerts/active";
+    const COUNTY_GEO_URL = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json";
+    const HEADERS = { "User-Agent": "NWS-IDSS-Dashboard/1.0 (contact@example.com)" };
+    
+    // ASSET DEFINITION: Brookings Hall (Logic remains, UI removed)
+    const ASSET_COORD = [38.6482, -90.3056];
+    const ASSET_LNG_LAT = [-90.3056, 38.6482];
+    const FIVE_MILE_METERS = 8046.72;
+    const FIVE_MILE_MILES = 5;
+
+    const PULSE_EVENTS = ["Tornado Warning", "Flash Flood Warning", "Severe Thunderstorm Warning", "Flood Warning"];
+    
+    const EVENT_PALETTE = {
+        "Tornado Warning": "#FF0000",
+        "Flash Flood Warning": "#FF00FF",
+        "Severe Thunderstorm Warning": "#FFA500",
+        "Flood Warning": "#00FF00",
+        "Blizzard Warning": "#FF4500",
+        "Winter Storm Warning": "#7B68EE",
+        "High Wind Warning": "#DAA520",
+        "Special Marine Warning": "#0000FF",
+        "Default": "#334155"
+    };
+
+    let map, alertsLayer, countyBoundaries = null;
+    let assetMarker, assetBuffer;
+    let rawAlertData = [];
+    let activeFilters = new Set();
+    let pulseOpacity = 0.8;
+    let pulseIncreasing = false;
+    let knownEmergencyIds = new Set();
+
+    function isPolygonBased(feature) {
+        return feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon');
+    }
+
+    function dismissEmergency() {
+        document.getElementById('tornado-emergency-modal').classList.add('hidden');
+    }
+
+    async function callGemini(prompt, systemPrompt = "") {
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: systemPrompt || "Tactical weather analysis. Be concise, focus on hazards." }] }
+        };
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            return result.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis unavailable.";
+        } catch (err) { return "Intelligence link failed."; }
+    }
+
+    function focusOnAlert(alertId) {
+        alertsLayer.eachLayer(layer => {
+            if (layer.feature.properties.id === alertId || layer.feature.properties.id_orig === alertId) {
+                const bounds = layer.getBounds();
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 10 });
+                decodeAlertDetail(layer.feature.properties);
+                
+                const center = bounds.getCenter();
+                fetchPointForecast(center.lat.toFixed(4), center.lng.toFixed(4));
+            }
+        });
+    }
+
+    function updateTicker(alerts) {
+        const track = document.getElementById('ticker-track');
+        const criticalAlerts = alerts.filter(a => PULSE_EVENTS.includes(a.properties.event));
+        
+        if (criticalAlerts.length === 0) {
+            track.innerHTML = '<span class="text-[10px] font-mono text-red-200/60 px-8 italic uppercase tracking-widest">No active critical life-safety warnings in national feed</span>';
+            return;
+        }
+
+        const tickerItems = criticalAlerts.map((a, idx) => {
+            const p = a.properties;
+            const aid = p.id || `ticker-id-${idx}`;
+            const time = new Date(p.issued || new Date()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            return `<span class="ticker-item inline-flex items-center gap-2 px-6 py-1" onclick="focusOnAlert('${aid}')">
+                <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                <b class="text-white text-[11px]">${p.event.toUpperCase()}</b> 
+                <span class="text-red-200 text-[10px]">${p.areaDesc}</span>
+                <span class="text-white/40 font-mono text-[8px] tracking-tighter">[ISSUED ${time}]</span>
+            </span>`;
+        }).join('<span class="text-red-500/50 mx-2">|</span>');
+
+        track.innerHTML = tickerItems + tickerItems;
+        track.style.animationDuration = `${Math.max(25, criticalAlerts.length * 10)}s`;
+    }
+
+    function checkEmergencyIntersections(alerts) {
+        const assetPoint = turf.point(ASSET_LNG_LAT);
+        const assetBufferTurf = turf.buffer(assetPoint, FIVE_MILE_MILES, { units: 'miles' });
+        
+        let triggerAlert = false;
+
+        alerts.forEach(alert => {
+            if (alert.properties.event === "Tornado Warning" && alert.geometry && isPolygonBased(alert)) {
+                try {
+                    const alertPoly = alert.geometry;
+                    const intersects = turf.booleanIntersects(assetBufferTurf, alertPoly);
+                    
+                    if (intersects && !knownEmergencyIds.has(alert.properties.id)) {
+                        triggerAlert = true;
+                        knownEmergencyIds.add(alert.properties.id);
+                    }
+                } catch (e) {
+                    console.error("Intersection check failed:", e);
+                }
+            }
+        });
+
+        if (triggerAlert) {
+            document.getElementById('tornado-emergency-modal').classList.remove('hidden');
+        }
+    }
+
+    async function fetchPointForecast(lat, lon) {
+        const forecastContent = document.getElementById('forecast-content');
+        const forecastSection = document.getElementById('forecast-section');
+        forecastSection.classList.remove('hidden');
+        forecastContent.innerHTML = '<div class="ai-loading h-12 rounded-lg mt-1"></div>';
+
+        try {
+            const metaRes = await fetch(`https://api.weather.gov/points/${lat},${lon}`, { headers: HEADERS });
+            const meta = await metaRes.json();
+            const forecastUrl = meta.properties.forecast;
+            const city = meta.properties.relativeLocation.properties.city;
+            const state = meta.properties.relativeLocation.properties.state;
+
+            const forecastRes = await fetch(forecastUrl, { headers: HEADERS });
+            const forecastData = await forecastRes.json();
+            const periods = forecastData.properties.periods.slice(0, 3);
+
+            const forecastStr = periods.map(p => `${p.name}: ${p.detailedForecast}`).join(' | ');
+            const aiSummary = await callGemini(
+                `Location: ${city}, ${state}. Data: ${forecastStr}`,
+                "Provide a 2-sentence tactical summary of weather trends for this specific point."
+            );
+
+            forecastContent.innerHTML = `
+                <div class="text-white font-black mb-1">${city}, ${state}</div>
+                <div class="leading-tight text-slate-400">${aiSummary}</div>
+            `;
+        } catch (err) {
+            forecastContent.innerHTML = '<span class="text-red-500 italic text-[10px]">Forecast unavailable.</span>';
+        }
+    }
+
+    async function decodeAlertDetail(alertProps) {
+        const detailPanel = document.getElementById('alert-detail-panel');
+        const detailBody = document.getElementById('detail-ai-body');
+        const forecastSection = document.getElementById('forecast-section');
+        
+        detailPanel.classList.remove('hidden');
+        forecastSection.classList.add('hidden');
+        
+        document.getElementById('detail-title').innerText = alertProps.event;
+        detailBody.innerHTML = '<div class="ai-loading h-24 rounded-xl mt-2"></div>';
+        
+        const summary = await callGemini(
+            `Decode hazard/action for: ${alertProps.headline || alertProps.event}. Details: ${alertProps.description}`,
+            "Read the NWS alert and provide a narrative brief including Impacts, Hazards, and Urgency."
+        );
+        detailBody.innerHTML = summary.replace(/\*/g, '').split('\n').map(l => `<p class="mb-2">${l}</p>`).join('');
+        document.getElementById('detail-summary').innerText = `✨ Impact Analysis`;
+    }
+
+    function initMap() {
+        map = L.map('map', { zoomSnap: 0.5 }).setView(ASSET_COORD, 11);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Invisible Asset Point for reference (Logic only)
+        const assetIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background: #3b82f6; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px #3b82f6;"></div>`,
+            iconSize: [10, 10],
+            iconAnchor: [5, 5]
+        });
+        
+        assetMarker = L.marker(ASSET_COORD, { icon: assetIcon, opacity: 0.8 }).addTo(map);
+        assetMarker.bindTooltip("WashU Center Point", { direction: 'top' });
+
+        assetBuffer = L.circle(ASSET_COORD, {
+            radius: FIVE_MILE_METERS,
+            color: '#3b82f6',
+            weight: 2,
+            opacity: 0.3,
+            fillColor: '#3b82f6',
+            fillOpacity: 0.03,
+            dashArray: '5, 10'
+        }).addTo(map);
+
+        alertsLayer = L.geoJSON(null, {
+            style: (feature) => {
+                const p = feature.properties;
+                const color = EVENT_PALETTE[p.event] || EVENT_PALETTE["Default"];
+                const isCritSBW = PULSE_EVENTS.includes(p.event) && isPolygonBased(feature);
+                
+                return {
+                    fillColor: color,
+                    weight: isCritSBW ? 4 : 1.5,
+                    opacity: 1,
+                    color: isCritSBW ? '#ffffff' : 'rgba(255,255,255,0.4)',
+                    fillOpacity: isCritSBW ? 0.35 : (PULSE_EVENTS.includes(p.event) ? 0.5 : 0.4),
+                    dashArray: isCritSBW ? '5, 5' : null,
+                    interactive: true
+                };
+            },
+            onEachFeature: (feature, layer) => {
+                layer.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    decodeAlertDetail(feature.properties);
+                    fetchPointForecast(e.latlng.lat.toFixed(4), e.latlng.lng.toFixed(4));
+                });
+            }
+        }).addTo(map);
+
+        map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+            document.getElementById('alert-detail-panel').classList.remove('hidden');
+            document.getElementById('detail-title').innerText = "Point Intel";
+            document.getElementById('detail-ai-body').innerHTML = '<div class="ai-loading h-20 rounded-xl mt-2"></div>';
+            document.getElementById('click-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            fetchPointForecast(lat.toFixed(4), lng.toFixed(4));
+        });
+
+        setInterval(() => {
+            pulseOpacity = pulseIncreasing ? pulseOpacity + 0.05 : pulseOpacity - 0.05;
+            if (pulseOpacity >= 0.9 || pulseOpacity <= 0.2) pulseIncreasing = !pulseIncreasing;
+            
+            if (assetBuffer) assetBuffer.setStyle({ opacity: pulseOpacity * 0.4 });
+            
+            alertsLayer.eachLayer(layer => {
+                const p = layer.feature.properties;
+                if (PULSE_EVENTS.includes(p.event)) {
+                    if (isPolygonBased(layer.feature)) {
+                        layer.setStyle({ weight: 2 + (pulseOpacity * 5), opacity: pulseOpacity + 0.1 });
+                    } else {
+                        layer.setStyle({ fillOpacity: pulseOpacity * 0.55 });
+                    }
+                }
+            });
+        }, 60);
+
+        document.getElementById('refresh-btn').onclick = fetchData;
+        document.getElementById('close-detail').onclick = () => document.getElementById('alert-detail-panel').classList.add('hidden');
+        document.getElementById('clear-filters').onclick = () => { activeFilters.clear(); applyFilters(); renderFilterList(); };
+    }
+
+    async function fetchData() {
+        try {
+            if (!countyBoundaries) {
+                const resGeo = await fetch(COUNTY_GEO_URL);
+                countyBoundaries = await resGeo.json();
+            }
+            
+            const res = await fetch(API_URL, { headers: HEADERS });
+            const data = await res.json();
+            
+            rawAlertData = data.features || [];
+            
+            // Background spatial check for Brookings Hall 5-mile intersection
+            checkEmergencyIntersections(rawAlertData);
+            
+            updateTicker(rawAlertData);
+            applyFilters();
+            renderFilterList();
+            updateSyncUI();
+        } catch (err) { console.error("Sync Error:", err); }
+    }
+
+    function applyFilters() {
+        const processed = [];
+        rawAlertData.forEach(alert => {
+            if (activeFilters.size > 0 && !activeFilters.has(alert.properties.event)) return;
+            if (alert.geometry) {
+                processed.push(alert);
+            } else if (countyBoundaries) {
+                (alert.properties.geocode?.SAME || []).forEach(code => {
+                    const fips = code.length === 6 ? code.substring(1) : code;
+                    const shape = countyBoundaries.features.find(f => f.id === fips);
+                    if (shape) processed.push({ type: "Feature", geometry: shape.geometry, properties: { ...alert.properties } });
+                });
+            }
+        });
+        alertsLayer.clearLayers().addData({ type: "FeatureCollection", features: processed });
+        
+        document.getElementById('stat-visible').innerText = processed.length;
+        document.getElementById('stat-high').innerText = rawAlertData.filter(a => PULSE_EVENTS.includes(a.properties.event)).length;
+    }
+
+    function renderFilterList() {
+        const container = document.getElementById('filter-container');
+        container.innerHTML = '';
+        const counts = {};
+        rawAlertData.forEach(f => { counts[f.properties.event] = (counts[f.properties.event] || 0) + 1; });
+        Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([event, count]) => {
+            const isActive = activeFilters.has(event);
+            const div = document.createElement('div');
+            div.className = `flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-blue-600/20 border-blue-500/50' : 'bg-slate-950/40 border-slate-800 hover:border-slate-600'}`;
+            div.innerHTML = `<span class="truncate pr-2">${event}</span><span class="font-black text-blue-400">${count}</span>`;
+            div.onclick = () => { isActive ? activeFilters.delete(event) : activeFilters.add(event); applyFilters(); renderFilterList(); };
+            container.appendChild(div);
+        });
+    }
+
+    function updateSyncUI() {
+        const now = new Date();
+        document.getElementById('sync-timestamp').innerText = now.toLocaleTimeString();
+    }
+
+    window.onload = () => { initMap(); fetchData(); setInterval(fetchData, 30000); };
+</script>
+</body>
+</html>
