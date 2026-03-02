@@ -236,39 +236,41 @@
     }
 
     async function callGemini(prompt, systemPrompt = "") {
-       // 1. Ensure API Key is Inserted Here
-        const apiKey = "AIzaSyBtiVyoUw6f9dVC0Jgs1MAZDWeWu1S2AEo"
-            
-        // 2. Using the stable 1.4 FlashModel
-        const MODEL_ID = "gemini-1.5-flash";
-        const URL = 'https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${apiKey}`;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt || "Weather Summary and Analysis. Be conside."}] }
-        };
-                
-        try {
-            const response = await fetch(URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            const result = await response.json();
-
-            if (result.error) {
-                console.error("Gemini API Error:", result.error.message);
-                return 'AI Error: ${result.error.message}`;
-            }
-
-            return result.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis unavailable.";
-        } catch (err) {
-            console.error("Network Error:", err);
-            return "AI-Assisted Intelligence Link Failed. Check Console.";
-        }
-    }
+    // 1. Corrected API Key variable (Local to this function)
+    const geminiKey = "AIzaSyBtiVyoUw6f9dVC0Jgs1MAZDWeWu1S2AEo";
+        
+    // 2. Using stable 1.5 Flash Model
+    const MODEL_ID = "gemini-1.5-flash";
     
+    // 3. FIX: Use backticks (`) for the entire URL to allow ${} interpolation
+    const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${geminiKey}`;
+
+    const payload = {
+        contents: [{ parts: [{ text: prompt }] }],
+        systemInstruction: { parts: [{ text: systemPrompt || "Weather Summary and Analysis. Be concise."}] }
+    };
+            
+    try {
+        const response = await fetch(URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await response.json();
+
+        if (result.error) {
+            console.error("Gemini API Error:", result.error.message);
+            // FIX: Corrected template literal for error reporting
+            return `AI Error: ${result.error.message}`;
+        }
+
+        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis unavailable.";
+    } catch (err) {
+        console.error("Network Error:", err);
+        return "AI-Assisted Intelligence Link Failed. Check Console.";
+    }
+}
     function focusOnAlert(alertId) {
         alertsLayer.eachLayer(layer => {
             if (layer.feature.properties.id === alertId || layer.feature.properties.id_orig === alertId) {
