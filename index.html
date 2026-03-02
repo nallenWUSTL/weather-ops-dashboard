@@ -235,19 +235,20 @@
         document.getElementById('tornado-emergency-modal').classList.add('hidden');
     }
 
-    async function callGemini(prompt, systemPrompt = "") {
-    // 1. Corrected API Key variable (Local to this function)
+   async function callGemini(prompt, systemPrompt = "") {
+    // 1. Your API Key (Ensured it matches your restricted key settings)
     const geminiKey = "AIzaSyBtiVyoUw6f9dVC0Jgs1MAZDWeWu1S2AEo";
         
-    // 2. Using stable 1.5 Flash Model
-    const MODEL_ID = "gemini-1.5-flash";
+    // 2. UPDATED: Using the standard stable alias or a newer version
+    // Try 'gemini-1.5-flash-latest' or 'gemini-2.0-flash' if 1.5 is still failing
+    const MODEL_ID = "gemini-1.5-flash-latest";
     
-    // 3. FIX: Use backticks (`) for the entire URL to allow ${} interpolation
+    // 3. Endpoint URL (using backticks for template literal)
     const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${geminiKey}`;
 
     const payload = {
         contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: { parts: [{ text: systemPrompt || "Weather Summary and Analysis. Be concise."}] }
+        systemInstruction: { parts: [{ text: systemPrompt || "Tactical weather analysis. Be concise."}] }
     };
             
     try {
@@ -260,15 +261,15 @@
         const result = await response.json();
 
         if (result.error) {
-            console.error("Gemini API Error:", result.error.message);
-            // FIX: Corrected template literal for error reporting
-            return `AI Error: ${result.error.message}`;
+            console.error("Gemini API Error Details:", result.error);
+            // Provide more descriptive error to the UI for easier debugging
+            return `AI Error (${result.error.code}): ${result.error.message}`;
         }
 
         return result.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis unavailable.";
     } catch (err) {
-        console.error("Network Error:", err);
-        return "AI-Assisted Intelligence Link Failed. Check Console.";
+        console.error("Network Connectivity Error:", err);
+        return "Intelligence Link Offline. Check Connection.";
     }
 }
     function focusOnAlert(alertId) {
