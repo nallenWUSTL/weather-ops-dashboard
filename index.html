@@ -7,22 +7,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Turf.js for spatial intersection logic -->
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <style>
         #map { height: 750px; border-radius: 1.5rem; background: #010409; cursor: crosshair; }
         
         .custom-scrollbar::-webkit-scrollbar { width: 5px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-
-        @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-        .ai-loading {
-            background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
 
         /* Ticker Animation */
         @keyframes ticker {
@@ -57,10 +48,29 @@
             animation: strobe 1s infinite;
             box-shadow: 0 0 100px rgba(220, 38, 38, 0.5);
         }
+
+        /* Layer Control Styling */
+        .leaflet-control-layers {
+            background: #0f172a !important;
+            color: white !important;
+            border: 1px solid #1e293b !important;
+            border-radius: 1rem !important;
+            padding: 8px !important;
+            font-family: ui-sans-serif, system-ui, sans-serif !important;
+            font-size: 10px !important;
+            text-transform: uppercase !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.05em !important;
+        }
+        .leaflet-control-layers-overlays label {
+            margin-bottom: 4px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30 overflow-x-hidden flex flex-col min-h-screen">
 
+<!-- Emergency Tornado Alert Modal -->
 <div id="tornado-emergency-modal" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-6">
     <div class="emergency-overlay max-w-4xl w-full border-4 border-white rounded-[3rem] p-10 text-center space-y-8">
         <div class="flex justify-center">
@@ -81,6 +91,7 @@
 </div>
 
 <div class="max-w-[1800px] mx-auto px-4 py-4 flex-grow w-full space-y-4">
+    <!-- Header -->
     <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-900/80 p-5 rounded-3xl border border-slate-800 backdrop-blur-xl">
         <div class="flex items-center gap-4">
             <div class="p-3 bg-blue-600 rounded-2xl shadow-xl shadow-blue-600/20">
@@ -96,8 +107,8 @@
             <div class="flex flex-col text-right">
                 <span class="text-[9px] font-black text-slate-500 uppercase tracking-widest">System Status</span>
                 <div class="flex items-center gap-2 justify-end">
-                    <div id="ai-status-dot" class="w-1.5 h-1.5 rounded-full bg-slate-600"></div>
-                    <span id="ai-status-text" class="text-[10px] font-mono text-slate-500 font-bold uppercase">AI Locked</span>
+                    <div class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                    <span class="text-[10px] font-mono text-green-500 font-bold uppercase">Live Connection</span>
                 </div>
             </div>
             <div class="w-px h-8 bg-slate-800"></div>
@@ -108,18 +119,13 @@
         </div>
         
         <div class="flex items-center gap-3">
-            <button onclick="setupApiKey()" class="bg-slate-800 hover:bg-slate-700 text-blue-400 px-4 py-2.5 rounded-2xl transition-all font-black text-[10px] uppercase tracking-widest active:scale-95 border border-slate-700">
-                🔑 Set AI Key
-            </button>
-            <button id="ai-brief-btn" class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-2xl transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest active:scale-95 shadow-lg border border-white/10">
-                ✨ Global Briefing
-            </button>
             <button id="refresh-btn" class="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-2xl transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest active:scale-95 border border-slate-700">
                 Sync Data
             </button>
         </div>
     </header>
 
+    <!-- Interactive Ticker -->
     <div class="bg-red-950/20 border border-red-500/30 rounded-2xl h-10 flex items-center overflow-hidden backdrop-blur-md">
         <div class="bg-red-600 px-4 h-full flex items-center z-10 shadow-lg shrink-0">
             <span class="text-[9px] font-black uppercase tracking-widest text-white whitespace-nowrap flex items-center gap-2">
@@ -134,7 +140,9 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sidebar -->
         <div class="lg:col-span-3 space-y-4">
+            <!-- Stats Panel -->
             <div class="bg-slate-900/50 border border-slate-800 p-5 rounded-3xl">
                 <div class="grid grid-cols-1 gap-4 text-[10px]">
                     <div class="bg-slate-950 p-6 rounded-2xl border border-slate-800 text-center hover:border-blue-500/50 transition-colors">
@@ -148,6 +156,7 @@
                 </div>
             </div>
 
+            <!-- Filters Panel -->
             <div class="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl shadow-xl">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
@@ -162,6 +171,7 @@
             </div>
         </div>
 
+        <!-- Map Container -->
         <div class="lg:col-span-9 relative">
             <div class="bg-slate-900 p-1 rounded-[2rem] border border-slate-800 shadow-2xl overflow-hidden relative">
                 <div id="map"></div>
@@ -172,13 +182,15 @@
                         <button id="close-detail" class="text-slate-500 hover:text-white">✕</button>
                     </div>
 
+                    <!-- Point Forecast Section -->
                     <div id="forecast-section" class="mb-4 border-b border-slate-800 pb-4 hidden">
                         <div class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-tighter">🌡️ Point Forecast (IDSS)</div>
                         <div id="forecast-content" class="text-[11px] text-slate-300"></div>
                     </div>
 
-                    <div id="detail-summary" class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-tighter">AI Analysis...</div>
-                    <div id="detail-ai-body" class="text-[11px] text-slate-300 leading-relaxed max-h-80 overflow-y-auto custom-scrollbar"></div>
+                    <!-- Impact Section -->
+                    <div class="text-[10px] text-blue-400 font-bold mb-2 uppercase tracking-tighter">Impact Analysis</div>
+                    <div id="detail-body" class="text-[11px] text-slate-300 leading-relaxed max-h-80 overflow-y-auto custom-scrollbar"></div>
                     <div id="click-coords" class="mt-4 text-[9px] text-slate-600 font-mono text-right"></div>
                 </div>
             </div>
@@ -187,32 +199,9 @@
 </div>
 
 <script>
-    // --- SECURE KEY MANAGEMENT ---
-    let activeApiKey = localStorage.getItem('user_gemini_key') || "";
-
-    function setupApiKey() {
-        const key = prompt("Enter your Gemini API Key:", activeApiKey);
-        if (key !== null) {
-            localStorage.setItem('user_gemini_key', key.trim());
-            activeApiKey = key.trim();
-            updateAIStatusUI();
-            alert("Key saved locally. Dashboard will now attempt AI synthesis.");
-        }
-    }
-
-    function updateAIStatusUI() {
-        const dot = document.getElementById('ai-status-dot');
-        const text = document.getElementById('ai-status-text');
-        if (activeApiKey) {
-            dot.classList.replace('bg-slate-600', 'bg-green-500');
-            dot.classList.add('animate-pulse');
-            text.classList.replace('text-slate-500', 'text-green-500');
-            text.innerText = "AI Ready";
-        }
-    }
-
     const API_URL = "https://api.weather.gov/alerts/active";
     const COUNTY_GEO_URL = "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json";
+    const RADAR_URL = "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0q.cgi";
     const HEADERS = { "User-Agent": "NWS-IDSS-Dashboard/1.0 (contact@example.com)" };
     
     const ASSET_COORD = [38.6482, -90.3056];
@@ -234,8 +223,7 @@
         "Default": "#334155"
     };
 
-    let map, alertsLayer, countyBoundaries = null;
-    let assetMarker, assetBuffer;
+    let map, alertsLayer, radarLayer, assetBuffer, countyBoundaries = null;
     let rawAlertData = [];
     let activeFilters = new Set();
     let pulseOpacity = 0.8;
@@ -248,38 +236,6 @@
 
     function dismissEmergency() {
         document.getElementById('tornado-emergency-modal').classList.add('hidden');
-    }
-
-    async function callGemini(prompt, systemPrompt = "") {
-        if (!activeApiKey) return "AI Intelligence locked. Use the 🔑 button to provide a key.";
-            
-        const MODEL_ID = "gemini-2.0-flash";
-        const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${activeApiKey}`;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            systemInstruction: { parts: [{ text: systemPrompt || "Tactical weather analysis. Be concise and professional." }] }
-        };
-                
-        try {
-            const response = await fetch(URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            
-            const result = await response.json();
-
-            if (result.error) {
-                console.error("Gemini API Error:", result.error);
-                return `AI Error (${result.error.code}): ${result.error.message}`;
-            }
-
-            return result.candidates?.[0]?.content?.parts?.[0]?.text || "Intelligence analysis unavailable.";
-        } catch (err) {
-            console.error("Network Error:", err);
-            return "Intelligence link failed. Check console or API key.";
-        }
     }
     
     function focusOnAlert(alertId) {
@@ -351,7 +307,7 @@
         const forecastContent = document.getElementById('forecast-content');
         const forecastSection = document.getElementById('forecast-section');
         forecastSection.classList.remove('hidden');
-        forecastContent.innerHTML = '<div class="ai-loading h-12 rounded-lg mt-1"></div>';
+        forecastContent.innerHTML = '<div class="text-[10px] text-slate-500 italic">Syncing Point Data...</div>';
 
         try {
             const metaRes = await fetch(`https://api.weather.gov/points/${lat},${lon}`, { headers: HEADERS });
@@ -362,17 +318,11 @@
 
             const forecastRes = await fetch(forecastUrl, { headers: HEADERS });
             const forecastData = await forecastRes.json();
-            const periods = forecastData.properties.periods.slice(0, 3);
-
-            const forecastStr = periods.map(p => `${p.name}: ${p.detailedForecast}`).join(' | ');
-            const aiSummary = await callGemini(
-                `Location: ${city}, ${state}. Data: ${forecastStr}`,
-                "Provide a 2-sentence tactical summary of weather trends for this specific point."
-            );
+            const p = forecastData.properties.periods[0];
 
             forecastContent.innerHTML = `
                 <div class="text-white font-black mb-1">${city}, ${state}</div>
-                <div class="leading-tight text-slate-400">${aiSummary}</div>
+                <div class="leading-tight text-slate-400"><b>${p.name}:</b> ${p.detailedForecast}</div>
             `;
         } catch (err) {
             forecastContent.innerHTML = '<span class="text-red-500 italic text-[10px]">Forecast unavailable.</span>';
@@ -381,28 +331,38 @@
 
     async function decodeAlertDetail(alertProps) {
         const detailPanel = document.getElementById('alert-detail-panel');
-        const detailBody = document.getElementById('detail-ai-body');
+        const detailBody = document.getElementById('detail-body');
         const forecastSection = document.getElementById('forecast-section');
         
         detailPanel.classList.remove('hidden');
         forecastSection.classList.add('hidden');
         
         document.getElementById('detail-title').innerText = alertProps.event;
-        detailBody.innerHTML = '<div class="ai-loading h-24 rounded-xl mt-2"></div>';
         
-        const summary = await callGemini(
-            `Decode hazard/action for: ${alertProps.headline || alertProps.event}. Details: ${alertProps.description}`,
-            "Read the NWS alert and provide a narrative brief including Impacts, Hazards, and Urgency."
-        );
-        detailBody.innerHTML = summary.replace(/\*/g, '').split('\n').map(l => `<p class="mb-2">${l}</p>`).join('');
-        document.getElementById('detail-summary').innerText = `✨ Impact Analysis`;
+        const description = alertProps.description || "No detailed description available.";
+        const instruction = alertProps.instruction ? `<div class="mt-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded-xl"><b>Instructions:</b><br>${alertProps.instruction}</div>` : "";
+        
+        detailBody.innerHTML = `
+            <div class="font-bold text-white mb-2">${alertProps.headline || ""}</div>
+            <div class="whitespace-pre-wrap">${description}</div>
+            ${instruction}
+        `;
     }
 
     function initMap() {
-        map = L.map('map', { zoomSnap: 0.5 }).setView(ASSET_COORD, 11);
+        map = L.map('map', { zoomSnap: 0.5 }).setView(ASSET_COORD, 9);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
+
+        // NEXRAD Radar Layer
+        radarLayer = L.tileLayer.wms(RADAR_URL, {
+            layers: 'nexrad-n0q-900913',
+            format: 'image/png',
+            transparent: true,
+            opacity: 0.65,
+            attribution: "Weather data © IEM NEXRAD"
+        });
 
         const assetIcon = L.divIcon({
             className: 'custom-div-icon',
@@ -411,7 +371,7 @@
             iconAnchor: [5, 5]
         });
         
-        assetMarker = L.marker(ASSET_COORD, { icon: assetIcon, opacity: 0.8 }).addTo(map);
+        const assetMarker = L.marker(ASSET_COORD, { icon: assetIcon, opacity: 0.8 }).addTo(map);
         assetMarker.bindTooltip("WashU Center Point", { direction: 'top' });
 
         assetBuffer = L.circle(ASSET_COORD, {
@@ -449,20 +409,31 @@
             }
         }).addTo(map);
 
+        // Layer Toggle Control
+        const overlays = {
+            "<span style='color: #60a5fa'>📡 Live Radar</span>": radarLayer,
+            "<span style='color: #60a5fa'>⭕ 5mi Safety Zone</span>": assetBuffer,
+            "<span style='color: #60a5fa'>⚠️ Weather Alerts</span>": alertsLayer
+        };
+        L.control.layers(null, overlays, { collapsed: false, position: 'bottomleft' }).addTo(map);
+
+        radarLayer.addTo(map);
+
         map.on('click', (e) => {
             const { lat, lng } = e.latlng;
             document.getElementById('alert-detail-panel').classList.remove('hidden');
             document.getElementById('detail-title').innerText = "Point Intel";
-            document.getElementById('detail-ai-body').innerHTML = '<div class="ai-loading h-20 rounded-xl mt-2"></div>';
+            document.getElementById('detail-body').innerHTML = '<div class="text-slate-500 italic">No alert active at this specific point. Checking local forecast...</div>';
             document.getElementById('click-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
             fetchPointForecast(lat.toFixed(4), lng.toFixed(4));
         });
 
+        // Pulse logic for animations
         setInterval(() => {
             pulseOpacity = pulseIncreasing ? pulseOpacity + 0.05 : pulseOpacity - 0.05;
             if (pulseOpacity >= 0.9 || pulseOpacity <= 0.2) pulseIncreasing = !pulseIncreasing;
             
-            if (assetBuffer) assetBuffer.setStyle({ opacity: pulseOpacity * 0.4 });
+            if (map.hasLayer(assetBuffer)) assetBuffer.setStyle({ opacity: pulseOpacity * 0.4 });
             
             alertsLayer.eachLayer(layer => {
                 const p = layer.feature.properties;
@@ -479,8 +450,6 @@
         document.getElementById('refresh-btn').onclick = fetchData;
         document.getElementById('close-detail').onclick = () => document.getElementById('alert-detail-panel').classList.add('hidden');
         document.getElementById('clear-filters').onclick = () => { activeFilters.clear(); applyFilters(); renderFilterList(); };
-        
-        updateAIStatusUI();
     }
 
     async function fetchData() {
@@ -489,9 +458,12 @@
                 const resGeo = await fetch(COUNTY_GEO_URL);
                 countyBoundaries = await resGeo.json();
             }
+            
             const res = await fetch(API_URL, { headers: HEADERS });
             const data = await res.json();
+            
             rawAlertData = data.features || [];
+            
             checkEmergencyIntersections(rawAlertData);
             updateTicker(rawAlertData);
             applyFilters();
@@ -515,6 +487,7 @@
             }
         });
         alertsLayer.clearLayers().addData({ type: "FeatureCollection", features: processed });
+        
         document.getElementById('stat-visible').innerText = processed.length;
         document.getElementById('stat-high').innerText = rawAlertData.filter(a => PULSE_EVENTS.includes(a.properties.event)).length;
     }
@@ -539,7 +512,7 @@
         document.getElementById('sync-timestamp').innerText = now.toLocaleTimeString();
     }
 
-    window.onload = () => { initMap(); fetchData(); setInterval(fetchData, 30000); };
+    window.onload = () => { initMap(); fetchData(); setInterval(fetchData, 60000); };
 </script>
 </body>
 </html>
