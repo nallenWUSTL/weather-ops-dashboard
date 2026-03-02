@@ -235,20 +235,24 @@
         document.getElementById('tornado-emergency-modal').classList.add('hidden');
     }
 
-   async function callGemini(prompt, systemPrompt = "") {
-    // 1. Your API Key (Ensured it matches your restricted key settings)
+async function callGemini(prompt, systemPrompt = "") {
+    // 1. Your API Key (ensure this is active in Google AI Studio)
     const geminiKey = "AIzaSyBtiVyoUw6f9dVC0Jgs1MAZDWeWu1S2AEo";
         
-    // 2. UPDATED: Using the standard stable alias or a newer version
-    // Try 'gemini-1.5-flash-latest' or 'gemini-2.0-flash' if 1.5 is still failing
-    const MODEL_ID = "gemini-1.5-flash-latest";
+    // 2. UPDATED: Using the latest standard model identifier
+    // Note: Use 'gemini-2.0-flash' or 'gemini-1.5-flash-latest'
+    const MODEL_ID = "gemini-2.0-flash";
     
-    // 3. Endpoint URL (using backticks for template literal)
+    // 3. Endpoint URL (Corrected to use backticks for the entire string)
     const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:generateContent?key=${geminiKey}`;
 
     const payload = {
-        contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: { parts: [{ text: systemPrompt || "Tactical weather analysis. Be concise."}] }
+        contents: [{ 
+            parts: [{ text: prompt }] 
+        }],
+        systemInstruction: { 
+            parts: [{ text: systemPrompt || "Tactical weather analysis. Be concise and professional." }] 
+        }
     };
             
     try {
@@ -260,18 +264,19 @@
         
         const result = await response.json();
 
+        // Error Handling for Model Mismatch or Key Issues
         if (result.error) {
-            console.error("Gemini API Error Details:", result.error);
-            // Provide more descriptive error to the UI for easier debugging
+            console.error("Gemini API Error:", result.error);
             return `AI Error (${result.error.code}): ${result.error.message}`;
         }
 
-        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Analysis unavailable.";
+        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Intelligence analysis unavailable.";
     } catch (err) {
-        console.error("Network Connectivity Error:", err);
-        return "Intelligence Link Offline. Check Connection.";
+        console.error("Network Error:", err);
+        return "Intelligence link failed. Please check your internet connection and API key.";
     }
 }
+    
     function focusOnAlert(alertId) {
         alertsLayer.eachLayer(layer => {
             if (layer.feature.properties.id === alertId || layer.feature.properties.id_orig === alertId) {
